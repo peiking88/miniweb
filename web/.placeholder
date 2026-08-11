@@ -1,0 +1,2 @@
+# 前端静态资源占位（阶段 6 填充 index.html / app.js / style.css）。
+# 此文件仅保证 web/ 目录存在，供 cpp-httplib set_mount_point 挂载。

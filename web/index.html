@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>miniweb 管理控制台</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 登录视图 -->
+    <div id="login-view" class="card login-card">
+        <h1>miniweb 管理控制台</h1>
+        <p class="hint">嵌入式 Web 管理服务器</p>
+        <input id="user" placeholder="用户名（admin / viewer）" autocomplete="off">
+        <input id="pass" type="password" placeholder="密码" autocomplete="off">
+        <button id="login-btn">登录</button>
+        <div id="login-error" class="error-text"></div>
+    </div>
+
+    <!-- 主视图 -->
+    <div id="main-view" style="display:none">
+        <header>
+            <span id="conn-status" class="badge">连接中…</span>
+            <span class="title">miniweb 管理控制台</span>
+            <span class="right">
+                <span id="user-info"></span>
+                <button id="logout-btn" class="link">登出</button>
+            </span>
+        </header>
+
+        <div class="grid">
+            <section class="card">
+                <h3>运行状态</h3>
+                <div id="status"></div>
+            </section>
+            <section class="card">
+                <h3>指标</h3>
+                <div id="metrics"></div>
+            </section>
+            <section class="card">
+                <h3>操作</h3>
+                <div class="actions">
+                    <button id="btn-restart" class="danger">重启宿主</button>
+                    <button id="btn-reload">重载配置</button>
+                    <button id="btn-diag">运行诊断</button>
+                </div>
+                <pre id="diag-result" class="diag"></pre>
+            </section>
+            <section class="card">
+                <h3>配置</h3>
+                <div id="config"></div>
+            </section>
+        </div>
+
+        <section class="card">
+            <h3>日志 <small id="log-hint"></small></h3>
+            <div id="logs" class="logs"></div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

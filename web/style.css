@@ -1,0 +1,115 @@
+/* miniweb 管理控制台 — 纯原生 CSS，无依赖 */
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa;
+    color: #1f2933;
+    font-size: 14px;
+}
+
+/* 卡片 */
+.card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    padding: 16px 20px;
+    margin: 12px;
+}
+.card h3 { margin: 0 0 12px; font-size: 15px; color: #52606d; }
+.card h3 small { color: #9aa5b1; font-weight: normal; }
+
+/* 登录 */
+.login-card {
+    max-width: 340px;
+    margin: 80px auto;
+    text-align: center;
+}
+.login-card h1 { margin: 0 0 4px; font-size: 20px; }
+.login-card .hint { margin: 0 0 20px; color: #9aa5b1; }
+.login-card input {
+    width: 100%; padding: 10px; margin: 6px 0;
+    border: 1px solid #cbd2d9; border-radius: 6px; font-size: 14px;
+}
+.login-card button {
+    width: 100%; padding: 10px; margin-top: 6px;
+    background: #2c7be5; color: #fff; border: none; border-radius: 6px;
+    font-size: 14px; cursor: pointer;
+}
+.login-card button:hover { background: #1864c0; }
+.error-text { color: #e12d39; margin-top: 8px; min-height: 18px; }
+
+/* 头部 */
+header {
+    display: flex; align-items: center; gap: 12px;
+    background: #1f2933; color: #f5f7fa;
+    padding: 10px 20px;
+}
+header .title { font-weight: 600; flex: 1; }
+header .right { display: flex; align-items: center; gap: 12px; }
+header .link {
+    background: transparent; color: #cbd2d9; border: none; cursor: pointer;
+    text-decoration: underline; font-size: 13px;
+}
+.badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 12px;
+    background: #cbd2d9; color: #1f2933;
+}
+.badge.ok { background: #27ab83; color: #fff; }
+.badge.warn { background: #f0a020; color: #fff; }
+.badge.err { background: #e12d39; color: #fff; }
+
+/* 网格 */
+.grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0;
+}
+
+/* 状态 */
+#status div { padding: 3px 0; }
+#status b { color: #27ab83; }
+
+/* 指标 */
+.metric {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    background: #f5f7fa; padding: 8px 12px; margin: 0 8px 8px 0;
+    border-radius: 6px;
+}
+.metric span { color: #52606d; }
+.metric b { font-size: 18px; color: #2c7be5; }
+.metric small { color: #9aa5b1; }
+
+/* 配置 */
+.cfg { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+.cfg span { width: 140px; color: #52606d; }
+.cfg input {
+    flex: 1; padding: 5px 8px; border: 1px solid #cbd2d9; border-radius: 4px;
+    font-size: 13px;
+}
+.cfg.ro input { background: #f5f7fa; color: #9aa5b1; }
+
+/* 操作 */
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions button {
+    padding: 7px 14px; border: 1px solid #cbd2d9; background: #fff;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.actions button:hover { background: #f5f7fa; }
+.actions button.danger { color: #e12d39; border-color: #e12d39; }
+.actions button.danger:hover { background: #fff5f5; }
+.diag {
+    margin-top: 10px; background: #1f2933; color: #9aa5b1;
+    padding: 10px; border-radius: 6px; font-size: 12px; min-height: 20px;
+    white-space: pre-wrap; word-break: break-all;
+}
+
+/* 日志 */
+.logs {
+    max-height: 340px; overflow-y: auto;
+    font-family: "SFMono-Regular", Consolas, monospace; font-size: 12px;
+    background: #1f2933; color: #cbd2d9; border-radius: 6px; padding: 10px;
+}
+.logs .log { padding: 2px 0; white-space: pre-wrap; word-break: break-all; }
+.logs .log.warn { color: #f0a020; }
+.logs .log.error { color: #e12d39; }
+.logs .log.debug { color: #9aa5b1; }
