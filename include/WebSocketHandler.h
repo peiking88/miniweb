@@ -14,6 +14,11 @@ class WebSocketHandler {
 public:
     WebSocketHandler(mgmt::IHostManagement& host);
     ~WebSocketHandler();
+    // C.21：自定义析构，显式禁用拷贝/移动（含 unique_ptr 隐式可移动，但移动后原对象析构访问空 impl_ → UB）
+    WebSocketHandler(const WebSocketHandler&) = delete;
+    WebSocketHandler& operator=(const WebSocketHandler&) = delete;
+    WebSocketHandler(WebSocketHandler&&) = delete;
+    WebSocketHandler& operator=(WebSocketHandler&&) = delete;
 
     // 加载证书并开始监听（内部 io 线程）。bindAddr 默认 loopback。返回 false 表示失败。
     bool start(const std::string& certPath, const std::string& keyPath, int port,

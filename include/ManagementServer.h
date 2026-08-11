@@ -16,6 +16,11 @@ class ManagementServer {
 public:
     ManagementServer(mgmt::IHostManagement& host, const std::string& webDir);
     ~ManagementServer();
+    // C.21：自定义析构，显式禁用拷贝/移动（聚合双通道 + unique_ptr，移动语义不安全）
+    ManagementServer(const ManagementServer&) = delete;
+    ManagementServer& operator=(const ManagementServer&) = delete;
+    ManagementServer(ManagementServer&&) = delete;
+    ManagementServer& operator=(ManagementServer&&) = delete;
 
     // 启动双通道并注册事件监听。bindAddr 默认 loopback。任一通道失败返回 false。
     bool start(int httpsPort, int wssPort,

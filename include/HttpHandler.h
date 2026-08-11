@@ -16,6 +16,11 @@ class HttpHandler {
 public:
     HttpHandler(mgmt::IHostManagement& host, const std::string& webDir);
     ~HttpHandler();
+    // C.21：自定义析构，显式禁用拷贝/移动（含 unique_ptr + thread，移动语义不安全）
+    HttpHandler(const HttpHandler&) = delete;
+    HttpHandler& operator=(const HttpHandler&) = delete;
+    HttpHandler(HttpHandler&&) = delete;
+    HttpHandler& operator=(HttpHandler&&) = delete;
 
     // 加载证书并开始监听（内部线程）。bindAddr 默认 loopback。返回 false 表示失败。
     bool start(const std::string& certPath, const std::string& keyPath, int port,
