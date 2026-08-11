@@ -5,7 +5,6 @@
 #include <rapidjson/writer.h>
 #include <rapidjson/stringbuffer.h>
 
-#include <cassert>
 #include <cstdio>
 
 using rapidjson::Document;
@@ -126,6 +125,7 @@ bool parseGetLogsParams(const std::string& paramsJson,
     if (!isObj(paramsJson, doc, err)) return false;
     sinceMs = (doc.HasMember("sinceMs") && doc["sinceMs"].IsUint64()) ? doc["sinceMs"].GetUint64() : 0;
     limit   = (doc.HasMember("limit")   && doc["limit"].IsUint())     ? doc["limit"].GetUint()     : 100;
+    if (limit > 1000) limit = 1000;   // P2: 防单请求拉取海量日志
     (void)err;
     return true;
 }

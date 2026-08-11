@@ -17,8 +17,9 @@ public:
     HttpHandler(mgmt::IHostManagement& host, const std::string& webDir);
     ~HttpHandler();
 
-    // 加载证书并开始监听（内部线程）。返回 false 表示证书加载或绑定失败。
-    bool start(const std::string& certPath, const std::string& keyPath, int port);
+    // 加载证书并开始监听（内部线程）。bindAddr 默认 loopback。返回 false 表示失败。
+    bool start(const std::string& certPath, const std::string& keyPath, int port,
+               const std::string& bindAddr = "127.0.0.1");
     void stop();
 
 private:

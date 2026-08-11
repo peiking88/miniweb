@@ -15,8 +15,9 @@ public:
     WebSocketHandler(mgmt::IHostManagement& host);
     ~WebSocketHandler();
 
-    // 加载证书并开始监听（内部 io 线程）。返回 false 表示失败。
-    bool start(const std::string& certPath, const std::string& keyPath, int port);
+    // 加载证书并开始监听（内部 io 线程）。bindAddr 默认 loopback。返回 false 表示失败。
+    bool start(const std::string& certPath, const std::string& keyPath, int port,
+               const std::string& bindAddr = "127.0.0.1");
     void stop();
 
     // 设置 Origin 白名单（CSWSH 防护）。空=不校验（默认）；非空=只允许列表内 Origin，

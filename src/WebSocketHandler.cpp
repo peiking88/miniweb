@@ -13,6 +13,9 @@
 
 #include <asio/ssl.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <future>
 #include <map>
 #include <mutex>
 #include <set>
@@ -39,6 +42,7 @@ struct WebSocketHandler::Impl {
     std::string certPath, keyPath;
     std::vector<std::string> allowedOrigins;
     std::thread ioThread;
+    bool asioReady = false;   // start 未成功/未调用时 stop 不访问 io_service
 
     Impl(mgmt::IHostManagement& h)
         : host(h), restartLimiter(1, 60000), setConfigLimiter(10, 1000) {
@@ -50,10 +54,12 @@ struct WebSocketHandler::Impl {
     void sendStr(websocketpp::connection_hdl hdl, const std::string& s) {
         websocketpp::lib::error_code ec;
         ws.send(hdl, s, websocketpp::frame::opcode::text, ec);
+        if (ec) std::printf("[WSS] send failed: %s\n", ec.message().c_str());
     }
     void closeHdl(websocketpp::connection_hdl hdl) {
         websocketpp::lib::error_code ec;
         ws.close(hdl, websocketpp::close::status::normal, "", ec);
+        if (ec) std::printf("[WSS] close failed: %s\n", ec.message().c_str());
     }
 
     // ---- 回调 ----
@@ -138,7 +144,7 @@ struct WebSocketHandler::Impl {
             sendStr(hdl, proto::makeResponseOk(rm.id, "{}")); break;
         }
         case proto::Action::getLogs: {
-            uint64_t since; uint32_t lim;
+            uint64_t since = 0; uint32_t lim = 100;
             proto::parseGetLogsParams(rm.paramsJson, since, lim, err);
             sendStr(hdl, proto::makeResponseOk(rm.id, proto::toJson(host.getLogs(since, lim)))); break;
         }
@@ -175,6 +181,9 @@ struct WebSocketHandler::Impl {
         if (!proto::parseSubscribe(payload, sm, err)) {
             sendStr(hdl, proto::makeResponseError(sm.id, proto::E_BAD_REQUEST, err)); return;
         }
+        if (!isAuthed(hdl)) {   // P2: 与 handleRequest 一致，订阅要求鉴权
+            sendStr(hdl, proto::makeResponseError(sm.id, proto::E_PERM_DENIED, "not authenticated")); return;
+        }
         {
             std::lock_guard<std::mutex> lk(mu);
             auto& c = conns[hdl];
@@ -205,46 +214,75 @@ struct WebSocketHandler::Impl {
         });
     }
 
-    bool start(const std::string& cert, const std::string& key, int port) {
+    bool start(const std::string& cert, const std::string& key, int port, const std::string& bindAddr) {
         certPath = cert; keyPath = key;
         try {
             ws.init_asio();
+            asioReady = true;
             ws.set_reuse_addr(true);
+            ws.set_max_message_size(64 * 1024);   // P2: WS 消息上限，防放大 DoS
             ws.set_open_handler([this](websocketpp::connection_hdl h) { onOpen(h); });
             ws.set_close_handler([this](websocketpp::connection_hdl h) { onClose(h); });
             ws.set_message_handler([this](websocketpp::connection_hdl h, WsServer::message_ptr m) { onMessage(h, m); });
             ws.set_validate_handler([this](websocketpp::connection_hdl h) -> bool {
-                if (allowedOrigins.empty()) return true;          // 空白名单 = 不校验
                 websocketpp::lib::error_code ec;
                 auto con = ws.get_con_from_hdl(h, ec);
                 if (ec) return false;
                 std::string origin = con->get_origin();
                 if (origin.empty()) return true;                  // 非浏览器客户端放行
-                for (const auto& a : allowedOrigins) if (a == origin) return true;
-                return false;                                     // 不在白名单 → 拒绝握手
+                // P2: scheme/host 小写化比较（RFC 6454）
+                std::string lo = origin;
+                std::transform(lo.begin(), lo.end(), lo.begin(),
+                               [](unsigned char c) { return std::tolower(c); });
+                std::vector<std::string> origins;
+                { std::lock_guard<std::mutex> lk(mu); origins = allowedOrigins; }   // P2: 读加锁
+                if (!origins.empty()) {
+                    for (const auto& a : origins) {
+                        std::string la = a;
+                        std::transform(la.begin(), la.end(), la.begin(),
+                                       [](unsigned char c) { return std::tolower(c); });
+                        if (la == lo) return true;
+                    }
+                    return false;                                 // 配置了白名单 → 严格匹配
+                }
+                // 默认本地策略——仅放行 localhost / 127.0.0.1 来源
+                return lo.find("localhost") != std::string::npos
+                    || lo.find("127.0.0.1") != std::string::npos;
             });
             ws.set_tls_init_handler([this](websocketpp::connection_hdl) -> websocketpp::lib::shared_ptr<asio::ssl::context> {
                 auto ctx = websocketpp::lib::make_shared<asio::ssl::context>(asio::ssl::context::tlsv12);
+                // P2: TLS 加固——禁旧协议/压缩、单 DH；限定强 cipher
+                ctx->set_options(asio::ssl::context::default_workarounds
+                               | asio::ssl::context::no_sslv2
+                               | asio::ssl::context::no_sslv3
+                               | asio::ssl::context::no_tlsv1
+                               | asio::ssl::context::no_compression
+                               | asio::ssl::context::single_dh_use);
+                SSL_CTX_set_cipher_list(ctx->native_handle(),
+                    "ECDHE+AESGCM:ECDHE+CHACHA20:!aNULL:!MD5:!DSS:!3DES:!RC4");
                 ctx->use_certificate_chain_file(certPath);
                 ctx->use_private_key_file(keyPath, asio::ssl::context::pem);
                 return ctx;
             });
-            ws.listen(port);
+            ws.listen(asio::ip::tcp::endpoint(asio::ip::address::from_string(bindAddr), port));
             ws.start_accept();
         } catch (const std::exception& e) {
             std::printf("[WSS] start failed: %s\n", e.what());
             return false;
         }
         ioThread = std::thread([this] { ws.run(); });
-        std::printf("[WSS] listening on :%d\n", port);
+        std::printf("[WSS] listening on %s:%d\n", bindAddr.c_str(), port);
         return true;
     }
 
     void stop() {
-        websocketpp::lib::error_code ec;
-        ws.stop_listening(ec);
-        // 推送 shutdown 事件并关闭所有连接（在 io 线程执行）
+        if (!asioReady) return;   // start 未成功/未调用 → 不访问 io_service
+        // P1: 整个关闭流程 post 到 io 线程（避免与 acceptor 跨线程争用）；
+        //     ws.stop() 在 lambda 末尾于 io 线程内调用，run 完成 lambda 后退出，外层 join。
+        //     不用 future——避免 run 已自然退出时 post 不派发导致 fut.wait 永久阻塞。
         ws.get_io_service().post([this] {
+            websocketpp::lib::error_code ec;
+            ws.stop_listening(ec);
             std::lock_guard<std::mutex> lk(mu);
             const std::string shutdownMsg =
                 proto::makeEvent(proto::EV_ALERT, "{\"message\":\"server shutting down\"}");
@@ -254,8 +292,8 @@ struct WebSocketHandler::Impl {
                 ws.close(kv.first, websocketpp::close::status::going_away, "shutdown", e);
             }
             conns.clear();
+            ws.stop();   // io 线程内停止 io_service，run 退出
         });
-        ws.stop();
         if (ioThread.joinable()) ioThread.join();
     }
 };
@@ -266,9 +304,13 @@ struct WebSocketHandler::Impl {
 WebSocketHandler::WebSocketHandler(mgmt::IHostManagement& host)
     : impl_(new Impl(host)) {}
 WebSocketHandler::~WebSocketHandler() { stop(); }
-bool WebSocketHandler::start(const std::string& certPath, const std::string& keyPath, int port) {
-    return impl_->start(certPath, keyPath, port);
+bool WebSocketHandler::start(const std::string& certPath, const std::string& keyPath, int port,
+                             const std::string& bindAddr) {
+    return impl_->start(certPath, keyPath, port, bindAddr);
 }
 void WebSocketHandler::stop() { if (impl_) impl_->stop(); }
 void WebSocketHandler::publish(const mgmt::Event& e) { impl_->publish(e); }
-void WebSocketHandler::setAllowedOrigins(const std::vector<std::string>& origins) { impl_->allowedOrigins = origins; }
+void WebSocketHandler::setAllowedOrigins(const std::vector<std::string>& origins) {
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    impl_->allowedOrigins = origins;
+}

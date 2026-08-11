@@ -17,9 +17,10 @@ public:
     ManagementServer(mgmt::IHostManagement& host, const std::string& webDir);
     ~ManagementServer();
 
-    // 启动双通道并注册事件监听。任一通道失败返回 false。
+    // 启动双通道并注册事件监听。bindAddr 默认 loopback。任一通道失败返回 false。
     bool start(int httpsPort, int wssPort,
-               const std::string& certPath, const std::string& keyPath);
+               const std::string& certPath, const std::string& keyPath,
+               const std::string& bindAddr = "127.0.0.1");
     void stop();
 
     // SIGHUP 触发：HTTPS 重建用新证书；WSS 新连接由 tls_init_handler 读新证书。
@@ -32,7 +33,7 @@ private:
     std::string webDir_;
     std::unique_ptr<HttpHandler> http_;
     std::unique_ptr<WebSocketHandler> ws_;
-    std::string certPath_, keyPath_;
+    std::string certPath_, keyPath_, bindAddr_;
     std::vector<std::string> allowedOrigins_;
     int httpsPort_ = 0;
 };

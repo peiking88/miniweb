@@ -12,12 +12,15 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <deque>
 #include <mutex>
 #include <random>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <openssl/rand.h>
 #include <unistd.h>
 
 class ExampleHost : public mgmt::IHostManagement {
@@ -25,6 +28,11 @@ public:
     // tokenTtlMs：会话 token 有效期，默认 24h（测试可传短值验证过期）
     explicit ExampleHost(uint64_t tokenTtlMs = 24ULL * 3600 * 1000)
         : start_(std::chrono::steady_clock::now()), ttlMs_(tokenTtlMs) {
+        // P3: 口令从 env 读（默认 admin/viewer，便于生产覆盖默认值）
+        const char* a = std::getenv("MINIWEB_ADMIN_PASS");
+        const char* v = std::getenv("MINIWEB_VIEWER_PASS");
+        adminPass_  = a ? a : "admin";
+        viewerPass_ = v ? v : "viewer";
         config_ = {
             {"log_level",       "info",  false},
             {"max_connections", "1024",  false},
@@ -97,8 +105,8 @@ public:
     bool login(const std::string& user, const std::string& password,
                std::string& token, std::string& err) override {
         std::string role;
-        if      (user == "admin"  && password == "admin")  role = "admin";
-        else if (user == "viewer" && password == "viewer") role = "viewer";
+        if      (user == "admin"  && password == adminPass_)  role = "admin";
+        else if (user == "viewer" && password == viewerPass_) role = "viewer";
         else { err = "invalid credentials"; return false; }
         token = randomToken();
         std::lock_guard<std::mutex> lk(mu_);
@@ -128,15 +136,14 @@ private:
             std::chrono::system_clock::now().time_since_epoch()).count();
     }
     static std::string randomToken() {
-        std::random_device rd;
-        std::uniform_int_distribution<unsigned> dist(0, 255);
-        static const char* d = "0123456789abcdef";
-        std::string hex; hex.reserve(32);
-        for (int i = 0; i < 16; ++i) {
-            unsigned b = dist(rd);
-            hex += d[b >> 4];
-            hex += d[b & 0xf];
+        unsigned char buf[16];
+        if (RAND_bytes(buf, sizeof(buf)) != 1) {   // P1: 密码学 RNG（极小概率失败时降级）
+            std::random_device rd;
+            for (int i = 0; i < 16; ++i) buf[i] = (unsigned char)(rd() & 0xff);
         }
+        static const char d[] = "0123456789abcdef";
+        std::string hex; hex.reserve(32);
+        for (int i = 0; i < 16; ++i) { hex += d[buf[i] >> 4]; hex += d[buf[i] & 0xf]; }
         return hex;
     }
 
@@ -146,6 +153,13 @@ private:
             for (int i = 0; i < 10; ++i) {            // 10×200ms = 2s
                 if (stopping_.load()) return;
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            }
+            {   // P1: 清扫过期 session，防止无界增长
+                std::lock_guard<std::mutex> lk(mu_);
+                for (auto it = sessions_.begin(); it != sessions_.end(); ) {
+                    if (nowMs() > it->second.expiryMs) it = sessions_.erase(it);
+                    else ++it;
+                }
             }
             EventCallback cb;
             { std::lock_guard<std::mutex> lk(mu_); cb = cb_; }
@@ -160,7 +174,7 @@ private:
             {
                 std::lock_guard<std::mutex> lk(mu_);
                 logs_.push_back(le);
-                if (logs_.size() > 1000) logs_.erase(logs_.begin());
+                if (logs_.size() > 1000) logs_.pop_front();
             }
             cb(mgmt::Event{proto::EV_LOG, proto::logEventPayload(le)});
             ++tick;
@@ -170,10 +184,11 @@ private:
     std::mutex mu_;
     std::unordered_map<std::string, Session> sessions_;
     std::vector<mgmt::ConfigItem> config_;
-    std::vector<mgmt::LogEntry>   logs_;
+    std::deque<mgmt::LogEntry>    logs_;
     EventCallback cb_;
     std::atomic<bool> stopping_{false};
     std::thread evtThread_;
     std::chrono::steady_clock::time_point start_;
     uint64_t ttlMs_;
+    std::string adminPass_, viewerPass_;
 };

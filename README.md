@@ -91,12 +91,13 @@ python3 -m venv /tmp/gcovr-env && /tmp/gcovr-env/bin/pip install -q gcovr \
 
 | 项 | 默认 | 说明 |
 |----|------|------|
+| 绑定地址 | `127.0.0.1` | env `MINIWEB_BIND_ADDR`；默认仅 loopback，生产可设 `0.0.0.0`（配合防火墙 + Origin 白名单） |
 | HTTPS 端口 | 8443 | 静态 + `/api/health` + `/api/login` |
 | WSS 端口 | 8444 | 全部管理通信 |
 | 证书 | `certs/cert.pem`、`certs/key.pem` | `scripts/gen-cert.sh` 生成（自签，开发用） |
-| 账号 | `admin/admin`、`viewer/viewer` | 示例宿主 `ExampleHost` 内置 |
-| Origin 白名单 | 空（不校验） | 环境变量 `MINIWEB_ALLOWED_ORIGINS`（逗号分隔）；非空时只允许列表内 Origin，空 Origin 放行 |
-| 证书热重载 | — | `kill -HUP <pid>`：HTTPS 重建，WSS 新连接用新证书（无需重启进程） |
+| 账号 | `admin` / `viewer` | env `MINIWEB_ADMIN_PASS`、`MINIWEB_VIEWER_PASS`（默认 `admin` / `viewer`） |
+| Origin 白名单 | 空 = 本地策略 | env `MINIWEB_ALLOWED_ORIGINS`（逗号分隔）；空 = 仅放行 localhost/127.0.0.1，非空 = 严格匹配（大小写不敏感），空 Origin 放行 |
+| 证书热重载 | — | `kill -HUP <pid>`（5s 冷却）；HTTPS 重建，WSS 新连接用新证书 |
 
 端口与账号当前硬编码于 `src/main.cpp` 与 `src/ExampleHost.h`；真实宿主自行实现 `IHostManagement` 决定账号逻辑。
 

@@ -4,6 +4,7 @@
 #include "HttpHandler.h"
 #include "WebSocketHandler.h"
 
+#include <chrono>
 #include <cstdio>
 
 ManagementServer::ManagementServer(mgmt::IHostManagement& host, const std::string& webDir)
@@ -12,14 +13,15 @@ ManagementServer::ManagementServer(mgmt::IHostManagement& host, const std::strin
 ManagementServer::~ManagementServer() { stop(); }
 
 bool ManagementServer::start(int httpsPort, int wssPort,
-                             const std::string& certPath, const std::string& keyPath) {
-    certPath_ = certPath; keyPath_ = keyPath; httpsPort_ = httpsPort;
+                             const std::string& certPath, const std::string& keyPath,
+                             const std::string& bindAddr) {
+    certPath_ = certPath; keyPath_ = keyPath; httpsPort_ = httpsPort; bindAddr_ = bindAddr;
     http_.reset(new HttpHandler(host_, webDir_));
-    if (!http_->start(certPath, keyPath, httpsPort)) return false;
+    if (!http_->start(certPath, keyPath, httpsPort, bindAddr)) return false;
 
     ws_.reset(new WebSocketHandler(host_));
     ws_->setAllowedOrigins(allowedOrigins_);
-    if (!ws_->start(certPath, keyPath, wssPort)) {
+    if (!ws_->start(certPath, keyPath, wssPort, bindAddr)) {
         http_->stop();
         return false;
     }
@@ -45,9 +47,17 @@ void ManagementServer::stop() {
 
 bool ManagementServer::reloadCerts() {
     if (!http_ || httpsPort_ == 0) return false;
+    // P3: 5s 冷却，防 SIGHUP 频繁 thrash（reload 期间 HTTPS 短暂不可用）
+    static std::chrono::steady_clock::time_point last;
+    auto now = std::chrono::steady_clock::now();
+    if (last != std::chrono::steady_clock::time_point() && now - last < std::chrono::seconds(5)) {
+        std::printf("[mgmt] SIGHUP ignored (cooldown 5s)\n");
+        return false;
+    }
+    last = now;
     std::printf("[mgmt] SIGHUP: reloading certs...\n");
     http_->stop();
-    bool ok = http_->start(certPath_, keyPath_, httpsPort_);
+    bool ok = http_->start(certPath_, keyPath_, httpsPort_, bindAddr_);
     // websocketpp 的 tls_init_handler 每连接读文件，新连接自动用新证书；旧连接不变
     std::printf("[mgmt] certs reloaded (https=%s, wss new conns use new cert)\n", ok ? "ok" : "FAILED");
     return ok;

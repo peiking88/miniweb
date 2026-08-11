@@ -170,8 +170,12 @@
 
 ## 5. 安全
 
-- **传输**：全链路 TLS（HTTPS + WSS），自签证书开发用，生产用正式证书。
-- **证书热加载**：`kill -HUP <pid>` 触发——HTTPS 重建用新证书，WSS 新连接由 `tls_init_handler` 读新证书（旧连接不变），无需重启进程。
-- **会话**：token 为 ≥128bit 随机串，默认有效期 24h，连接级、过期由桥接层关连接。
+- **绑定地址**：默认仅 `127.0.0.1`（loopback），env `MINIWEB_BIND_ADDR` 切换。运维通道默认不对所有网卡开放。
+- **传输**：全链路 TLS（HTTPS + WSS），TLS 1.2+，禁 SSLv2/3/TLS1.0 与压缩，cipher 限定 `ECDHE+AESGCM:ECDHE+CHACHA20`。自签证书开发用，生产用正式证书。
+- **证书热加载**：`kill -HUP <pid>`（5s 冷却防 thrash）——HTTPS 重建用新证书，WSS 新连接由 `tls_init_handler` 读新证书（旧连接不变），无需重启进程。
+- **会话**：token 为 ≥128bit 随机串（OpenSSL `RAND_bytes`），默认有效期 24h，连接级；过期 session 由宿主周期清扫（防无界增长）。
 - **速率限制**：login 5/30s、restart 1/60s、setConfig 10/s（桥接层集中、线程安全）。
-- **来源校验**：环境变量 `MINIWEB_ALLOWED_ORIGINS`（逗号分隔）配置 Origin 白名单防 CSWSH。默认空=不校验；非空=只允许列表内 Origin，空 Origin（非浏览器客户端）放行。
+- **来源校验**：env `MINIWEB_ALLOWED_ORIGINS`（逗号分隔）配置 Origin 白名单防 CSWSH。**默认空 = 本地策略**（仅放行 localhost/127.0.0.1）；非空 = 严格匹配（scheme/host 大小写不敏感，RFC 6454）；空 Origin（非浏览器客户端）放行。
+- **消息上限**：POST body 64KB、WS 单帧 64KB、log limit 封顶 1000，防放大 DoS。
+- **响应头**：`Cache-Control:no-store`、`X-Frame-Options:DENY`、`X-Content-Type-Options:nosniff`、`Referrer-Policy:no-referrer`。
+- **口令**：env `MINIWEB_ADMIN_PASS` / `MINIWEB_VIEWER_PASS` 覆盖默认（admin / viewer）。
